@@ -10,6 +10,11 @@
   "bin": {
     "aws-saml": "./bin/cli.js"
   },
+  "scripts": {
+    "prepublish": "yarn build",
+    "build": "webpack --mode production"
+  },
+  "main": "./dist/main.js",
   "author": "ddimitrioglo",
   "license": "MIT",
   "preferGlobal": true,
@@ -23,10 +28,19 @@
   },
   "dependencies": {
     "aws-sdk": "^2.211.1",
+    "babel-polyfill": "^6.26.0",
     "commander": "^2.15.1",
     "cross-fetch": "^2.2.0",
     "form-data": "^2.3.2",
     "request": "^2.85.0",
     "sax": "^1.2.4"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-loader": "^7.1.4",
+    "babel-preset-env": "^1.6.1",
+    "clean-webpack-plugin": "^0.1.19",
+    "webpack": "^4.8.1",
+    "webpack-cli": "^2.1.3"
   }
 }
