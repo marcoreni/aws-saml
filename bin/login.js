@@ -1,8 +1,6 @@
 'use strict';
 
 const url = require('url');
-const sax = require('sax');
-const AWS = require('aws-sdk');
 const Saml = require('../lib/saml');
 const rlex = require('../lib/extra-readline');
 const CredentialsParser = require('../lib/credentials-parser');
@@ -12,47 +10,28 @@ const CredentialsParser = require('../lib/credentials-parser');
  * @param {Object} config
  */
 function login(config) {
-  const { directoryDomain, username, profile, accountMapping } = require(config.path);
-  const idpEntryUrl = url.resolve(directoryDomain, 'adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices');
-  const saml = new Saml(idpEntryUrl);
+  const configObject = require(config.path);
+  const { username, profile } = configObject;
+  
+  const saml = new Saml(configObject);
   const parser = new CredentialsParser();
 
-  let samlRawResponse = '';
+  return askCredentials(username)
+    .then(credentials => saml.login(credentials.username, credentials.password))
+    .then(chooseAccount)
+    .then(chosenAccount => {
+      parser.updateProfile(profile, {
+        aws_access_key_id: chosenAccount.AccessKeyId,
+        aws_secret_access_key: chosenAccount.SecretAccessKey,
+        aws_session_token: chosenAccount.SessionToken
+      }).persist();
 
-  Promise.all([
-    askCredentials(username),
-    saml.getLoginPath()
-  ]).then(([credentials, loginPath]) => {
-
-    return saml.getSamlResponse(loginPath, credentials.username, credentials.password);
-  }).then(samlResponse => {
-    samlRawResponse = samlResponse;
-
-    return parseRoles(Saml.parseSamlResponse(samlRawResponse));
-  }).then(roles => {
-
-    return Promise.all(roles.map(role => {
-      return assumeRole(role.roleArn, role.principalArn, samlRawResponse);
-    })).then(results => {
-      return results.filter(Boolean);
+      console.log('Done!');
+      process.exit(0);
+    }).catch(err => {
+      console.error(`Failed with error: ${err.message.trim()}`);
+      process.exit(1);
     });
-  }).then(availableAccounts => {
-
-    return chooseAccount(availableAccounts, accountMapping);
-  }).then(chosenAccount => {
-
-    parser.updateProfile(profile, {
-      aws_access_key_id: chosenAccount.AccessKeyId,
-      aws_secret_access_key: chosenAccount.SecretAccessKey,
-      aws_session_token: chosenAccount.SessionToken
-    }).persist();
-
-    console.log('Done!');
-    process.exit(0);
-  }).catch(err => {
-    console.error(`Failed with error: ${err.message.trim()}`);
-    process.exit(1);
-  });
 }
 
 module.exports = login;
@@ -77,17 +56,12 @@ function askCredentials(username) {
 /**
  * Choose AWS account to login
  * @param {Array} accounts
- * @param {Object} mapping
  * @returns {Promise}
  */
-function chooseAccount(accounts, mapping) {
-  const accountsList = accounts.map((account, index) => {
-    let [, accountId] = account.Arn.match(/(\d+):role/);
-
-    return `[ ${index} ] ${account.Arn} (${mapping[accountId] || accountId})`;
+function chooseAccount(accounts) {
+  accounts.map((account, index) => {
+    console.log(`[ ${index} ] ${account.Arn} (${account.name})`);
   });
-
-  console.log(accountsList.join('\n'));
 
   return new Promise(resolve => {
     rlex.resume();
@@ -97,50 +71,4 @@ function chooseAccount(accounts, mapping) {
       return resolve(accounts[index]);
     });
   });
-}
-
-/**
- * Parse role ARNs from xmlSamlResponse
- * @param {String} xmlString
- * @returns {Promise}
- */
-function parseRoles(xmlString) {
-  return new Promise((resolve, reject) => {
-    let roles = [];
-    let parser = sax.parser(false);
-
-    parser.ontext = text => {
-      if (/^arn:aws:iam::.*/.test(text)) {
-        const [ principalArn, roleArn ] = text.split(',');
-
-        roles.push({ principalArn, roleArn });
-      }
-    };
-
-    parser.onerror = err => reject(err);
-    parser.onend = () => resolve(roles);
-    parser.write(xmlString).close();
-  })
-}
-
-/**
- * Assume role (resolve false on fail)
- * @param {String} roleArn
- * @param {String} principalArn
- * @param {String} samlResponse
- * @returns {Promise}
- */
-function assumeRole(roleArn, principalArn, samlResponse) {
-  const sts = new AWS.STS();
-  const params = { RoleArn: roleArn, PrincipalArn: principalArn, SAMLAssertion: samlResponse };
-
-  return sts
-    .assumeRoleWithSAML(params)
-    .promise()
-    .then(data => {
-      return Promise.resolve(
-        Object.assign({ Arn: roleArn }, data.Credentials)
-      );
-    })
-    .catch(() => Promise.resolve(false));
 }
