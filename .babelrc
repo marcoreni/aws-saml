@@ -11,5 +11,6 @@
                 }
             }
         ]
-    ]
+    ],
+    "plugins": ["es6-promise"]
 }

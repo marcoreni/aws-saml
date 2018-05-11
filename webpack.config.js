@@ -1,7 +1,8 @@
+const webpack = require('webpack');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
 
 module.exports = {
-  entry: ['babel-polyfill', './lib/saml.js'],
+  entry: './lib/saml.js',
   output: {
     libraryTarget: 'umd'
   },
