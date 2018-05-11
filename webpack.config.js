@@ -19,5 +19,8 @@ module.exports = {
   },
   plugins: [
     new CleanWebpackPlugin(['dist']),
+    new webpack.EnvironmentPlugin({
+      'WEBPACK_BUILD': true,
+    })
   ],
 };

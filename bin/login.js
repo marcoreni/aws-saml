@@ -12,12 +12,12 @@ const CredentialsParser = require('../lib/credentials-parser');
 function login(config) {
   const configObject = require(config.path);
   const { username, profile } = configObject;
-  
+
   const saml = new Saml(configObject);
   const parser = new CredentialsParser();
 
   return askCredentials(username)
-    .then(credentials => saml.login(credentials.username, credentials.password))
+    .then(credentials => saml.authenticate(credentials.username, credentials.password))
     .then(chooseAccount)
     .then(chosenAccount => {
       parser.updateProfile(profile, {
